@@ -1,4 +1,4 @@
-package walker
+package walker_test
 
 import (
 	"flag"
@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	//"github.com/karrick/godirwalk"
+	"github.com/saracen/walker"
 	"github.com/saracen/walker/testdata/fastwalk"
 )
 
@@ -61,7 +62,7 @@ func testWalk(t *testing.T, files map[string]os.FileMode) {
 
 	var l sync.Mutex
 	walkerResults := make(map[string]os.FileInfo)
-	err = Walk(dir, func(pathname string, fi os.FileInfo) error {
+	err = walker.Walk(dir, func(pathname string, fi os.FileInfo) error {
 		if strings.Contains(pathname, "skip") {
 			return filepath.SkipDir
 		}
@@ -105,63 +106,139 @@ func TestWalker(t *testing.T) {
 
 var benchDir = flag.String("benchdir", runtime.GOROOT(), "The directory to scan for BenchmarkFilepathWalk and BenchmarkWalkerWalk")
 
-func TestFilepathWalkDir(t *testing.T) {
+type tester interface {
+	Fatal(args ...interface{})
+}
+
+func filepathWalk(t tester) {
 	err := filepath.Walk(*benchDir, func(pathname string, fi os.FileInfo, err error) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func BenchmarkFilepathWalk(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		err := filepath.Walk(*benchDir, func(pathname string, fi os.FileInfo, err error) error { return nil })
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func TestWalkerDir(t *testing.T) {
-	err := Walk(*benchDir, func(pathname string, fi os.FileInfo) error { return nil })
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func BenchmarkWalkerWalk(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		err := Walk(*benchDir, func(pathname string, fi os.FileInfo) error { return nil })
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func TestFastwalkDir(t *testing.T) {
-	err := fastwalk.Walk(*benchDir, func(pathname string, mode os.FileMode) error {
+func filepathWalkAppend(t tester) (paths []string) {
+	err := filepath.Walk(*benchDir, func(pathname string, fi os.FileInfo, err error) error {
+		paths = append(paths, pathname)
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	return
 }
+
+func TestFilepathWalkDir(t *testing.T) { filepathWalk(t) }
+
+func BenchmarkFilepathWalk(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		filepathWalk(b)
+	}
+}
+
+func BenchmarkFilepathWalkAppend(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = filepathWalkAppend(b)
+	}
+}
+
+func walkerWalk(t tester) {
+	err := walker.Walk(*benchDir, func(pathname string, fi os.FileInfo) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func walkerWalkAppend(t tester) (paths []string) {
+	var l sync.Mutex
+	err := walker.Walk(*benchDir, func(pathname string, fi os.FileInfo) error {
+		l.Lock()
+		paths = append(paths, pathname)
+		l.Unlock()
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+func TestWalkerWalkDir(t *testing.T) { walkerWalk(t) }
+
+func BenchmarkWalkerWalk(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		walkerWalk(b)
+	}
+}
+
+func BenchmarkWalkerWalkAppend(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = walkerWalkAppend(b)
+	}
+}
+
+func fastwalkWalk(t tester) {
+	err := fastwalk.Walk(*benchDir, func(pathname string, mode os.FileMode) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func fastwalkWalkLstat(t tester) {
+	err := fastwalk.Walk(*benchDir, func(pathname string, mode os.FileMode) error {
+		_, err := os.Lstat(pathname)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+func fastwalkWalkAppend(t tester) (paths []string) {
+	var l sync.Mutex
+	err := fastwalk.Walk(*benchDir, func(pathname string, mode os.FileMode) error {
+		l.Lock()
+		paths = append(paths, pathname)
+		l.Unlock()
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+func TestFastwalkWalkDir(t *testing.T) { fastwalkWalk(t) }
+
+func TestFastwalkWalkLstatDir(t *testing.T) { fastwalkWalkLstat(t) }
 
 func BenchmarkFastwalkWalk(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		err := fastwalk.Walk(*benchDir, func(pathname string, mode os.FileMode) error {
-			_, err := os.Lstat(pathname)
-			return err
-		})
-		if err != nil {
-			b.Fatal(err)
-		}
+		fastwalkWalk(b)
 	}
 }
 
-/*func TestGodirwalkDir(t *testing.T) {
+func BenchmarkFastwalkWalkAppend(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = fastwalkWalkAppend(b)
+	}
+}
+
+func BenchmarkFastwalkWalkLstat(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		fastwalkWalkLstat(b)
+	}
+}
+
+/*func godirwalkWalk(t tester) {
 	err := godirwalk.Walk(*benchDir, &godirwalk.Options{
 		Callback: func(osPathname string, dirent *godirwalk.Dirent) error {
 			return nil
@@ -173,17 +250,53 @@ func BenchmarkFastwalkWalk(b *testing.B) {
 	}
 }
 
+func godirwalkWalkLstat(t tester) (paths []string) {
+	err := godirwalk.Walk(*benchDir, &godirwalk.Options{
+		Callback: func(osPathname string, dirent *godirwalk.Dirent) error {
+			_, err := os.Lstat(osPathname)
+			return err
+		},
+		Unsorted: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+func godirwalkWalkAppend(t tester) (paths []string) {
+	err := godirwalk.Walk(*benchDir, &godirwalk.Options{
+		Callback: func(osPathname string, dirent *godirwalk.Dirent) error {
+			paths = append(paths, osPathname)
+			return nil
+		},
+		Unsorted: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+func TestGodirwalkWalkDir(t *testing.T) { godirwalkWalk(t) }
+
 func BenchmarkGodirwalkWalk(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		err := godirwalk.Walk(*benchDir, &godirwalk.Options{
-			Callback: func(osPathname string, dirent *godirwalk.Dirent) error {
-				return nil
-			},
-			Unsorted: true,
-		})
-		if err != nil {
-			b.Fatal(err)
-		}
+		godirwalkWalk(b)
+	}
+}
+
+func BenchmarkGodirwalkWalkAppend(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = godirwalkWalkAppend(b)
+	}
+}
+
+func BenchmarkGodirwalkWalkLstat(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		godirwalkWalkLstat(b)
 	}
 }*/

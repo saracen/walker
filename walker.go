@@ -32,7 +32,7 @@ func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error) error
 		w.limit = 4
 	}
 
-	err = w.walk(root)
+	err = w.readdir(root)
 
 	w.wg.Wait()
 	if err := w.err.Load(); err != nil {
@@ -50,7 +50,7 @@ type walker struct {
 	fn      func(pathname string, fi os.FileInfo) error
 }
 
-func (w *walker) do(dirname string, fi os.FileInfo) error {
+func (w *walker) walk(dirname string, fi os.FileInfo) error {
 	pathname := dirname + string(filepath.Separator) + fi.Name()
 
 	err := w.fn(pathname, fi)
@@ -66,35 +66,34 @@ func (w *walker) do(dirname string, fi os.FileInfo) error {
 		return nil
 	}
 
-	if fi.IsDir() {
-		current := atomic.LoadUint32(&w.counter)
+	if !fi.IsDir() {
+		return nil
+	}
 
-		// if we haven't reached our goroutine limit, spawn a new one
-		if current < uint32(w.limit) {
-			if atomic.CompareAndSwapUint32(&w.counter, current, current+1) {
-				if err := w.err.Load(); err != nil {
-					return err.(error)
-				}
+	if err := w.err.Load(); err != nil {
+		return err.(error)
+	}
 
-				w.wg.Add(1)
-				go func() {
-					if err := w.walk(pathname); err != nil {
-						w.err.Store(err)
-					}
+	current := atomic.LoadUint32(&w.counter)
 
-					w.wg.Done()
-					atomic.AddUint32(&w.counter, ^uint32(0))
-				}()
-
-				return nil
-			}
-		}
-
-		// if we've reached our limit, continue with this goroutine
-		if err := w.walk(pathname); err != nil {
-			return err
+	// if we haven't reached our goroutine limit, spawn a new one
+	if current < uint32(w.limit) {
+		if atomic.CompareAndSwapUint32(&w.counter, current, current+1) {
+			w.wg.Add(1)
+			go w.gowalk(pathname)
+			return nil
 		}
 	}
 
-	return nil
+	// if we've reached our limit, continue with this goroutine
+	return w.readdir(pathname)
+}
+
+func (w *walker) gowalk(pathname string) {
+	if err := w.readdir(pathname); err != nil {
+		w.err.Store(err)
+	}
+
+	w.wg.Done()
+	atomic.AddUint32(&w.counter, ^uint32(0))
 }

@@ -4,7 +4,7 @@ package walker
 
 import "os"
 
-func (w *walker) walk(dirname string) error {
+func (w *walker) readdir(dirname string) error {
 	f, err := os.Open(dirname)
 	if err != nil {
 		return err
@@ -17,7 +17,7 @@ func (w *walker) walk(dirname string) error {
 	}
 
 	for _, fi := range list {
-		if err = w.do(dirname, fi); err != nil {
+		if err = w.walk(dirname, fi); err != nil {
 			return err
 		}
 	}
