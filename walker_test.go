@@ -1,6 +1,7 @@
 package walker_test
 
 import (
+	"context"
 	"flag"
 	"io/ioutil"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	//"github.com/karrick/godirwalk"
 	"github.com/saracen/walker"
@@ -102,6 +104,17 @@ func TestWalker(t *testing.T) {
 		"bar/symlink":         os.ModeDir | os.ModeSymlink | 0777,
 		"bar/symlink.go":      os.ModeSymlink | 0777,
 	})
+}
+
+func TestWalkerWithContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Nanosecond)
+	defer cancel()
+	err := walker.WalkWithContext(ctx, runtime.GOROOT(), func(pathname string, fi os.FileInfo) error {
+		return nil
+	})
+	if err == nil {
+		t.Fatalf("expecting timeout error, got nil")
+	}
 }
 
 var benchDir = flag.String("benchdir", runtime.GOROOT(), "The directory to scan for BenchmarkFilepathWalk and BenchmarkWalkerWalk")

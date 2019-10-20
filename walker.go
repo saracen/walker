@@ -1,6 +1,7 @@
 package walker
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,14 +10,21 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Walk walks the file tree rooted at root, calling walkFn for each
+// Walk wraps WalkWithContext using the background context.
+func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error) error {
+	return WalkWithContext(context.Background(), root, walkFn)
+}
+
+// WalkWithContext walks the file tree rooted at root, calling walkFn for each
 // file or directory in the tree, including root.
 //
 // If fastWalk returns filepath.SkipDir, the directory is skipped.
 //
 // Multiple goroutines stat the filesystem concurrently. The provided
 // walkFn must be safe for concurrent use.
-func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error) error {
+func WalkWithContext(ctx context.Context, root string, walkFn func(pathname string, fi os.FileInfo) error) error {
+	wg, ctx := errgroup.WithContext(ctx)
+
 	fi, err := os.Lstat(root)
 	if err != nil {
 		return err
@@ -28,7 +36,13 @@ func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error) error
 		return err
 	}
 
-	w := walker{limit: runtime.NumCPU(), fn: walkFn, counter: 1}
+	w := walker{
+		counter: 1,
+		limit:   runtime.NumCPU(),
+		ctx:     ctx,
+		wg:      wg,
+		fn:      walkFn,
+	}
 	if w.limit < 4 {
 		w.limit = 4
 	}
@@ -43,7 +57,8 @@ func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error) error
 type walker struct {
 	counter uint32
 	limit   int
-	wg      errgroup.Group
+	ctx     context.Context
+	wg      *errgroup.Group
 	fn      func(pathname string, fi os.FileInfo) error
 }
 
@@ -65,6 +80,12 @@ func (w *walker) walk(dirname string, fi os.FileInfo) error {
 
 	if !fi.IsDir() {
 		return nil
+	}
+
+	select {
+	case <-w.ctx.Done():
+		return w.ctx.Err()
+	default:
 	}
 
 	current := atomic.LoadUint32(&w.counter)
