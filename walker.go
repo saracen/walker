@@ -4,8 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"sync/atomic"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // Walk walks the file tree rooted at root, calling walkFn for each
@@ -27,26 +28,22 @@ func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error) error
 		return err
 	}
 
-	w := walker{limit: runtime.NumCPU(), fn: walkFn}
+	w := walker{limit: runtime.NumCPU(), fn: walkFn, counter: 1}
 	if w.limit < 4 {
 		w.limit = 4
 	}
 
-	err = w.readdir(root)
+	w.wg.Go(func() error {
+		return w.gowalk(root)
+	})
 
-	w.wg.Wait()
-	if err := w.err.Load(); err != nil {
-		return err.(error)
-	}
-
-	return err
+	return w.wg.Wait()
 }
 
 type walker struct {
 	counter uint32
 	limit   int
-	wg      sync.WaitGroup
-	err     atomic.Value
+	wg      errgroup.Group
 	fn      func(pathname string, fi os.FileInfo) error
 }
 
@@ -70,17 +67,14 @@ func (w *walker) walk(dirname string, fi os.FileInfo) error {
 		return nil
 	}
 
-	if err := w.err.Load(); err != nil {
-		return err.(error)
-	}
-
 	current := atomic.LoadUint32(&w.counter)
 
 	// if we haven't reached our goroutine limit, spawn a new one
 	if current < uint32(w.limit) {
 		if atomic.CompareAndSwapUint32(&w.counter, current, current+1) {
-			w.wg.Add(1)
-			go w.gowalk(pathname)
+			w.wg.Go(func() error {
+				return w.gowalk(pathname)
+			})
 			return nil
 		}
 	}
@@ -89,11 +83,11 @@ func (w *walker) walk(dirname string, fi os.FileInfo) error {
 	return w.readdir(pathname)
 }
 
-func (w *walker) gowalk(pathname string) {
+func (w *walker) gowalk(pathname string) error {
 	if err := w.readdir(pathname); err != nil {
-		w.err.Store(err)
+		return err
 	}
 
-	w.wg.Done()
 	atomic.AddUint32(&w.counter, ^uint32(0))
+	return nil
 }
