@@ -27,25 +27,26 @@ func testWalk(t *testing.T, files map[string]os.FileMode) {
 
 	for path, mode := range files {
 		path = filepath.Join(dir, path)
-		if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
+		err := os.MkdirAll(filepath.Dir(path), 0777)
+		if err != nil {
 			t.Fatal(err)
 		}
 
 		switch {
 		case mode&os.ModeSymlink != 0 && mode&os.ModeDir != 0:
-			if err := os.Symlink(filepath.Dir(path), path); err != nil {
-				t.Fatal(err)
-			}
+			err = os.Symlink(filepath.Dir(path), path)
 
 		case mode&os.ModeSymlink != 0:
-			if err := os.Symlink("foo/foo.go", path); err != nil {
-				t.Fatal(err)
-			}
+			err = os.Symlink("foo/foo.go", path)
+
+		case mode&os.ModeDir != 0:
+			err = os.Mkdir(path, mode)
 
 		default:
-			if err := ioutil.WriteFile(path, []byte(path), mode); err != nil {
-				t.Fatal(err)
-			}
+			err = ioutil.WriteFile(path, []byte(path), mode)
+		}
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -53,6 +54,16 @@ func testWalk(t *testing.T, files map[string]os.FileMode) {
 	err = filepath.Walk(dir, func(pathname string, fi os.FileInfo, err error) error {
 		if strings.Contains(pathname, "skip") {
 			return filepath.SkipDir
+		}
+
+		if filepath.Base(pathname) == "perm-error" {
+			if err == nil {
+				t.Errorf("expected permission error for path %v", pathname)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("unexpected error for path %v", pathname)
+			}
 		}
 
 		filepathResults[pathname] = fi
@@ -74,7 +85,19 @@ func testWalk(t *testing.T, files map[string]os.FileMode) {
 		l.Unlock()
 
 		return nil
-	})
+	}, walker.WithErrorCallback(func(pathname string, err error) error {
+		if filepath.Base(pathname) == "perm-error" {
+			if err == nil {
+				t.Errorf("expected permission error for path %v", pathname)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("unexpected error for path %v", pathname)
+			}
+		}
+		return nil
+	}))
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,6 +126,7 @@ func TestWalker(t *testing.T) {
 		"skip/file":           0700,
 		"bar/symlink":         os.ModeDir | os.ModeSymlink | 0777,
 		"bar/symlink.go":      os.ModeSymlink | 0777,
+		"perm-error":          os.ModeDir | 0000,
 	})
 }
 
