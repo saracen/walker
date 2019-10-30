@@ -11,7 +11,7 @@ import (
 )
 
 // Walk wraps WalkWithContext using the background context.
-func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error, opts ...WalkerOption) error {
+func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error, opts ...Option) error {
 	return WalkWithContext(context.Background(), root, walkFn, opts...)
 }
 
@@ -22,7 +22,7 @@ func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error, opts 
 //
 // Multiple goroutines stat the filesystem concurrently. The provided
 // walkFn must be safe for concurrent use.
-func WalkWithContext(ctx context.Context, root string, walkFn func(pathname string, fi os.FileInfo) error, opts ...WalkerOption) error {
+func WalkWithContext(ctx context.Context, root string, walkFn func(pathname string, fi os.FileInfo) error, opts ...Option) error {
 	wg, ctx := errgroup.WithContext(ctx)
 
 	fi, err := os.Lstat(root)
