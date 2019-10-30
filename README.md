@@ -5,17 +5,31 @@
 `walker` is a faster, parallel version, of `filepath.Walk`.
 
 ```
-walker.Walk("/tmp", func(pathname string, fi os.FileInfo) error {
+// walk function called for every path found
+walkFn := func(pathname string, fi os.FileInfo) error {
     fmt.Printf("%s: %d bytes\n", pathname, fi.Size())
+    return nil
+}
+
+// error function called for every error encountered
+errorCallbackOption := walker.WithErrorCallback(func(pathname string, err error) error {
+    // ignore permissione errors
+    if os.IsPermission(err) {
+        return nil
+    }
+    // halt traversal on any other error
+    return err
 })
+
+walker.Walk("/tmp", walkFn, errorCallbackOption)
 ```
 
 ## Benchmarks
 
 - Standard library (`filepath.Walk`) is `FilepathWalk`.
 - This library is `WalkerWalk`
-- `FastwalkWalk` is [https://github.com/golang/tools/tree/master/internal/fastwalk](fastwalk).
-- `GodirwalkWalk` is [https://github.com/karrick/godirwalk](godirwalk).
+- `FastwalkWalk` is [fastwalk](https://github.com/golang/tools/tree/master/internal/fastwalk).
+- `GodirwalkWalk` is [godirwalk](https://github.com/karrick/godirwalk).
 
 This library and `filepath.Walk` both perform `os.Lstat` calls and provide a full `os.FileInfo` structure to the callback. `BenchmarkFastwalkWalkLstat` and `BenchmarkGodirwalkWalkLstat` include this stat call for better comparison with `BenchmarkFilepathWalk` and `BenchmarkWalkerWalk`.
 

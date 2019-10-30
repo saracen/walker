@@ -11,8 +11,8 @@ import (
 )
 
 // Walk wraps WalkWithContext using the background context.
-func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error) error {
-	return WalkWithContext(context.Background(), root, walkFn)
+func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error, opts ...WalkerOption) error {
+	return WalkWithContext(context.Background(), root, walkFn, opts...)
 }
 
 // WalkWithContext walks the file tree rooted at root, calling walkFn for each
@@ -22,7 +22,7 @@ func Walk(root string, walkFn func(pathname string, fi os.FileInfo) error) error
 //
 // Multiple goroutines stat the filesystem concurrently. The provided
 // walkFn must be safe for concurrent use.
-func WalkWithContext(ctx context.Context, root string, walkFn func(pathname string, fi os.FileInfo) error) error {
+func WalkWithContext(ctx context.Context, root string, walkFn func(pathname string, fi os.FileInfo) error, opts ...WalkerOption) error {
 	wg, ctx := errgroup.WithContext(ctx)
 
 	fi, err := os.Lstat(root)
@@ -47,6 +47,13 @@ func WalkWithContext(ctx context.Context, root string, walkFn func(pathname stri
 		w.limit = 4
 	}
 
+	for _, o := range opts {
+		err := o(&w.options)
+		if err != nil {
+			return err
+		}
+	}
+
 	w.wg.Go(func() error {
 		return w.gowalk(root)
 	})
@@ -60,6 +67,7 @@ type walker struct {
 	ctx     context.Context
 	wg      *errgroup.Group
 	fn      func(pathname string, fi os.FileInfo) error
+	options walkerOptions
 }
 
 func (w *walker) walk(dirname string, fi os.FileInfo) error {
@@ -101,14 +109,19 @@ func (w *walker) walk(dirname string, fi os.FileInfo) error {
 	}
 
 	// if we've reached our limit, continue with this goroutine
-	return w.readdir(pathname)
+	err = w.readdir(pathname)
+	if err != nil && w.options.errorCallback != nil {
+		err = w.options.errorCallback(pathname, err)
+	}
+	return err
 }
 
 func (w *walker) gowalk(pathname string) error {
-	if err := w.readdir(pathname); err != nil {
-		return err
+	err := w.readdir(pathname)
+	if err != nil && w.options.errorCallback != nil {
+		err = w.options.errorCallback(pathname, err)
 	}
 
 	atomic.AddUint32(&w.counter, ^uint32(0))
-	return nil
+	return err
 }
