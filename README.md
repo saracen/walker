@@ -4,7 +4,7 @@
 
 `walker` is a faster, parallel version, of `filepath.Walk`.
 
-```
+```go
 // walk function called for every path found
 walkFn := func(pathname string, fi os.FileInfo) error {
     fmt.Printf("%s: %d bytes\n", pathname, fi.Size())
