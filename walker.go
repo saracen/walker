@@ -90,10 +90,8 @@ func (w *walker) walk(dirname string, fi os.FileInfo) error {
 		return nil
 	}
 
-	select {
-	case <-w.ctx.Done():
-		return w.ctx.Err()
-	default:
+	if err = w.ctx.Err(); err != nil {
+		return err
 	}
 
 	current := atomic.LoadUint32(&w.counter)
