@@ -6,8 +6,6 @@ package walker
 import (
 	"os"
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
 
 func (w *walker) readdir(dirname string) error {
@@ -25,7 +23,7 @@ func (w *walker) readdir(dirname string) error {
 	for {
 		if bufp >= nbuf {
 			bufp = 0
-			nbuf, err = unix.ReadDirent(fd, buf)
+			nbuf, err = syscall.ReadDirent(fd, buf)
 			if err != nil {
 				return err
 			}
@@ -34,7 +32,7 @@ func (w *walker) readdir(dirname string) error {
 			}
 		}
 
-		consumed, count, names := unix.ParseDirent(buf[bufp:nbuf], 100, names[0:])
+		consumed, count, names := syscall.ParseDirent(buf[bufp:nbuf], 100, names[0:])
 		bufp += consumed
 
 		for _, name := range names[:count] {
