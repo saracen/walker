@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	//"github.com/karrick/godirwalk"
+	// "github.com/karrick/godirwalk"
 	"github.com/saracen/walker"
 	"github.com/saracen/walker/testdata/fastwalk"
 )
@@ -56,7 +56,7 @@ func testWalk(t *testing.T, files map[string]os.FileMode) {
 			return filepath.SkipDir
 		}
 
-		if filepath.Base(pathname) == "perm-error" {
+		if filepath.Base(pathname) == "perm-error" && runtime.GOOS != "windows" {
 			if err == nil {
 				t.Errorf("expected permission error for path %v", pathname)
 			}
@@ -233,7 +233,6 @@ func fastwalkWalkLstat(t tester) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return
 }
 
 func fastwalkWalkAppend(t tester) (paths []string) {
