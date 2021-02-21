@@ -64,9 +64,9 @@ type temporaryError interface {
 
 func open(path string, mode int, perm uint32) (fd int, err error) {
 	for {
-		nbuf, err := syscall.Open(path, mode, perm)
+		fd, err := syscall.Open(path, mode, perm)
 		if err == nil {
-			return nbuf, nil
+			return fd, nil
 		}
 		if err, ok := err.(temporaryError); !ok || !err.Temporary() {
 			return 0, err
