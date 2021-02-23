@@ -57,19 +57,11 @@ func (w *walker) readdir(dirname string) error {
 //
 // This causes syscall.Open and syscall.ReadDirent sometimes fail with EINTR errors.
 // We need to retry in this case.
-type temporaryError interface {
-	error
-	Temporary() bool
-}
-
 func open(path string, mode int, perm uint32) (fd int, err error) {
 	for {
 		fd, err := syscall.Open(path, mode, perm)
-		if err == nil {
-			return fd, nil
-		}
-		if err, ok := err.(temporaryError); !ok || !err.Temporary() {
-			return 0, err
+		if err != syscall.EINTR {
+			return fd, err
 		}
 	}
 }
@@ -77,11 +69,8 @@ func open(path string, mode int, perm uint32) (fd int, err error) {
 func readDirent(fd int, buf []byte) (n int, err error) {
 	for {
 		nbuf, err := syscall.ReadDirent(fd, buf)
-		if err == nil {
-			return nbuf, nil
-		}
-		if err, ok := err.(temporaryError); !ok || !err.Temporary() {
-			return 0, err
+		if err != syscall.EINTR {
+			return nbuf, err
 		}
 	}
 }
