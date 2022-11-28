@@ -2,6 +2,7 @@ package walker
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,8 +33,17 @@ func WalkWithContext(ctx context.Context, root string, walkFn func(pathname stri
 	if err = walkFn(root, fi); err == filepath.SkipDir {
 		return nil
 	}
-	if err != nil || !fi.IsDir() {
+	if err != nil {
 		return err
+	}
+	if fi.Mode()&fs.ModeSymlink != 0 {
+		fi, err = os.Stat(root)
+		if err != nil {
+			return err
+		}
+	}
+	if !fi.IsDir() {
+		return nil
 	}
 
 	w := walker{
