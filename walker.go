@@ -36,15 +36,19 @@ func WalkWithContext(ctx context.Context, root string, walkFn func(pathname stri
 		return err
 	}
 
+	cpuLimit := runtime.NumCPU()
+	if cpuLimit < 4 {
+		cpuLimit = 4
+	}
+
 	w := walker{
 		counter: 1,
-		limit:   runtime.NumCPU(),
-		ctx:     ctx,
-		wg:      wg,
-		fn:      walkFn,
-	}
-	if w.limit < 4 {
-		w.limit = 4
+		options: walkerOptions{
+			limit: cpuLimit,
+		},
+		ctx: ctx,
+		wg:  wg,
+		fn:  walkFn,
 	}
 
 	for _, o := range opts {
@@ -63,7 +67,6 @@ func WalkWithContext(ctx context.Context, root string, walkFn func(pathname stri
 
 type walker struct {
 	counter uint32
-	limit   int
 	ctx     context.Context
 	wg      *errgroup.Group
 	fn      func(pathname string, fi os.FileInfo) error
@@ -97,7 +100,7 @@ func (w *walker) walk(dirname string, fi os.FileInfo) error {
 	current := atomic.LoadUint32(&w.counter)
 
 	// if we haven't reached our goroutine limit, spawn a new one
-	if current < uint32(w.limit) {
+	if current < uint32(w.options.limit) {
 		if atomic.CompareAndSwapUint32(&w.counter, current, current+1) {
 			w.wg.Go(func() error {
 				return w.gowalk(pathname)
