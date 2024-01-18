@@ -36,7 +36,7 @@ func WalkWithContext(ctx context.Context, root string, walkFn func(pathname stri
 		return err
 	}
 
-	cpuLimit := runtime.NumCPU()
+	cpuLimit := runtime.GOMAXPROCS(-1)
 	if cpuLimit < 4 {
 		cpuLimit = 4
 	}
